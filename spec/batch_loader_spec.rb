@@ -77,15 +77,6 @@ RSpec.describe BatchLoader do
     end
   end
 
-  describe '#batch_loader?' do
-    it 'always returns true' do
-      user = User.save(id: 1)
-      post = Post.new(user_id: user.id)
-
-      expect(post.user_lazy.batch_loader?).to eq(true)
-    end
-  end
-
   describe '#inspect' do
     it 'returns BatchLoader without syncing and delegates #inspect after' do
       user = User.save(id: 1)

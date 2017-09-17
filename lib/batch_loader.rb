@@ -2,13 +2,13 @@
 
 require "set"
 
-require "batch_loader/version"
-require "batch_loader/executor_proxy"
-require "batch_loader/middleware"
-require "batch_loader/graphql"
+require_relative "./batch_loader/version"
+require_relative "./batch_loader/executor_proxy"
+require_relative "./batch_loader/middleware"
+require_relative "./batch_loader/graphql"
 
 class BatchLoader
-  IMPLEMENTED_INSTANCE_METHODS = %i[object_id __id__ __send__ singleton_method_added batch_loader? respond_to? batch inspect].freeze
+  IMPLEMENTED_INSTANCE_METHODS = %i[object_id __id__ __send__ singleton_method_added __sync__ respond_to? batch inspect].freeze
   REPLACABLE_INSTANCE_METHODS = %i[batch inspect].freeze
   LEFT_INSTANCE_METHODS = (IMPLEMENTED_INSTANCE_METHODS - REPLACABLE_INSTANCE_METHODS).freeze
 
@@ -32,16 +32,27 @@ class BatchLoader
     self
   end
 
-  def batch_loader?
-    true
-  end
-
   def respond_to?(method_name)
     LEFT_INSTANCE_METHODS.include?(method_name) || method_missing(:respond_to?, method_name)
   end
 
   def inspect
     "#<BatchLoader:0x#{(object_id << 1)}>"
+  end
+
+  def __sync__
+    return @loaded_value if @synced
+
+    ensure_batched
+    @loaded_value = executor_proxy.loaded_value(item: @item)
+
+    if @cache
+      @synced = true
+    else
+      purge_cache
+    end
+
+    @loaded_value
   end
 
   private
@@ -51,17 +62,11 @@ class BatchLoader
   end
 
   def sync!
-    return self if @synced
-
-    ensure_batched
-    loaded_value = executor_proxy.loaded_value(item: @item)
+    loaded_value = __sync__
 
     if @cache
       replace_with!(loaded_value)
-      @synced = true
-      self
     else
-      purge_cache
       loaded_value
     end
   end
@@ -92,6 +97,8 @@ class BatchLoader
         end
       end
     end
+
+    self
   end
 
   def purge_cache
